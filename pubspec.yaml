@@ -1,0 +1,36 @@
+name: photolink_app
+description: PhotoLink（图联）手机端 - 局域网相册 HTTPS 服务与 mDNS 广播
+publish_to: "none"
+version: 1.1.0+2
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  shelf: ^1.4.2
+  shelf_router: ^1.1.4
+  photo_manager: ^3.7.1
+  permission_handler: ^12.0.1
+  bonsoir: ^5.1.11
+  network_info_plus: ^6.1.4
+  qr_flutter: ^4.1.0
+  path_provider: ^2.1.5
+  path: ^1.9.1
+  uuid: ^4.5.1
+  device_info_plus: ^11.5.0
+  mime: ^2.0.0
+  mobile_scanner: ^7.0.1
+  http: ^1.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/certs/
