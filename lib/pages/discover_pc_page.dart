@@ -112,7 +112,7 @@ class _DiscoverPcPageState extends State<DiscoverPcPage> {
           title: const Text('配对成功'),
           content: Text(
             '已把本机地址 ${phone.ip}:${phone.port} 发给电脑「${pc.deviceName}」。\n'
-            '请在电脑端点击连接即可浏览相册。',
+            '电脑端将自动连接并打开相册。',
           ),
           actions: [
             FilledButton(
