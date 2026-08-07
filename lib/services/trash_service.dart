@@ -81,9 +81,11 @@ class TrashService {
     return Directory(p.join(root.path, trashId));
   }
 
-  /// 软删除：备份后删除系统相册资源
+  /// 软删除：先全部备份，再一次性批量删系统相册（避免逐张弹系统「允许删除」）
   Future<List<String>> softDelete(List<String> photoIds) async {
-    final okIds = <String>[];
+    if (photoIds.isEmpty) return const [];
+
+    final readyIds = <String>[];
     for (final photoId in photoIds) {
       final asset = await AssetEntity.fromId(photoId);
       if (asset == null) continue;
@@ -125,10 +127,14 @@ class TrashService {
         }
       } catch (_) {}
 
-      await PhotoManager.editor.deleteWithIds([photoId]);
-      okIds.add(photoId);
+      readyIds.add(photoId);
     }
-    return okIds;
+
+    if (readyIds.isEmpty) return const [];
+
+    // 关键一次系统删除请求，用户点一次「允许」即可批量删除
+    final deleted = await PhotoManager.editor.deleteWithIds(readyIds);
+    return deleted;
   }
 
   Future<List<TrashItem>> list() async {
