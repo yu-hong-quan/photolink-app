@@ -6,6 +6,22 @@
 
 ---
 
+## 界面预览
+
+### 已连接电脑（首页）
+
+服务运行中且电脑已接入时的状态；可搜索附近电脑或扫码配对。请保持 App 在前台以便传输。
+
+![已连接电脑首页](docs/screenshots/app-home-connected.png)
+
+### 关于作者
+
+版本、运行环境、相册 / 配对端口与作者信息。
+
+![关于作者](docs/screenshots/app-about.png)
+
+---
+
 ## 功能概览
 
 | 能力 | 说明 |
@@ -116,6 +132,7 @@ lib/
   services/       # HTTPS 相册服务、mDNS、配对客户端、回收站等
   theme/          # 主题
 scripts/          # 多环境运行 / 打包脚本
+docs/screenshots/ # README 界面截图
 assets/certs/     # 自签名证书（局域网 HTTPS）
 assets/icons/     # 应用图标
 ```
@@ -133,7 +150,7 @@ assets/icons/     # 应用图标
 
 ## 作者
 
-- 作者：余洪权（yu-hong-quan）
+- 作者：余洪全（yu-hong-quan）
 - GitHub：https://github.com/yu-hong-quan
 - 仓库：https://github.com/yu-hong-quan/photolink-app
 
