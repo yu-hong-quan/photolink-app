@@ -129,9 +129,62 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _pcIp = null;
   }
 
+  /// 硬重启：停 HTTPS + mDNS 后重建（会断开 PC）
   Future<void> _restart() async {
     await _shutdown();
     await _bootstrap();
+  }
+
+  /// 刷新入口：服务已在跑则软刷新，避免打断现有 PC 连接
+  Future<void> _onRefreshPressed() async {
+    if (_running) {
+      await _softRefreshKeepConnection();
+    } else {
+      await _restart();
+    }
+  }
+
+  /// 仅刷新本机信息与 mDNS 广播，不 stop HTTPS（连接正常时必须走这条）
+  Future<void> _softRefreshKeepConnection() async {
+    final wasConnected = _pcConnected;
+    final keptPcIp = _pcIp;
+    setState(() {
+      _error = null;
+      _status = wasConnected ? '刷新中（保持电脑连接）…' : '刷新局域网广播…';
+    });
+    try {
+      final info = await DeviceBootstrapService.instance.buildDeviceInfo();
+      // 更新对外 device/info，不重建 HttpServer
+      final server = _server;
+      if (server != null) {
+        server.deviceInfo = info;
+      }
+      await _mdns.start(info);
+      if (!mounted) return;
+      setState(() {
+        _info = info;
+        // 显式保留连接态，防止中间态被误清
+        _pcConnected = wasConnected;
+        _pcIp = keptPcIp;
+        _status = _connectedStatusText();
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wasConnected ? '已刷新，电脑连接保持中' : '已刷新局域网广播',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '刷新失败：$e';
+        _pcConnected = wasConnected;
+        _pcIp = keptPcIp;
+        _status = _connectedStatusText();
+      });
+    }
   }
 
   Future<void> _openScanner(DeviceInfoModel info) async {
@@ -200,8 +253,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           title: const Text('${PhotoLinkConst.appName} · ${PhotoLinkConst.appNameZh}'),
           actions: [
             IconButton(
-              tooltip: '刷新 / 重启服务',
-              onPressed: _restart,
+              tooltip: '刷新（已连接时保持服务）',
+              onPressed: _onRefreshPressed,
               icon: const Icon(Icons.refresh_rounded),
             ),
           ],
@@ -211,17 +264,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
             children: [
               FadeSlideIn(
-                child: _HeroHeader(running: _running),
+                child: _HeroHeader(
+                  running: _running,
+                  pcConnected: _pcConnected,
+                ),
               ),
               const SizedBox(height: 16),
               FadeSlideIn(
                 delay: const Duration(milliseconds: 80),
                 child: _StatusCard(
                   running: _running,
+                  pcConnected: _pcConnected,
+                  pcIp: _pcIp,
                   status: _status,
                   error: _error,
                 ),
               ),
+              if (_pcConnected && _running) ...[
+                const SizedBox(height: 16),
+                FadeSlideIn(
+                  delay: const Duration(milliseconds: 100),
+                  child: _PcLinkedBanner(pcIp: _pcIp),
+                ),
+              ],
               if (info != null) ...[
                 const SizedBox(height: 16),
                 FadeSlideIn(
@@ -256,24 +321,33 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 }
 
 class _HeroHeader extends StatelessWidget {
-  const _HeroHeader({required this.running});
+  const _HeroHeader({required this.running, required this.pcConnected});
 
   final bool running;
+  final bool pcConnected;
 
   @override
   Widget build(BuildContext context) {
+    final subtitle = !running
+        ? '正在准备本机相册服务…'
+        : pcConnected
+            ? '电脑已接入，相册可在 PC 端操作'
+            : '服务已就绪，可扫电脑二维码配对';
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [PhotoLinkTheme.brand, PhotoLinkTheme.brandDark],
+          colors: pcConnected
+              ? const [Color(0xFF1FA87A), PhotoLinkTheme.brandDark]
+              : const [PhotoLinkTheme.brand, PhotoLinkTheme.brandDark],
         ),
         boxShadow: [
           BoxShadow(
-            color: PhotoLinkTheme.brand.withValues(alpha: 0.28),
+            color: (pcConnected ? const Color(0xFF1FA87A) : PhotoLinkTheme.brand)
+                .withValues(alpha: 0.28),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
@@ -288,17 +362,22 @@ class _HeroHeader extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Icon(Icons.photo_library_rounded,
-                color: Colors.white, size: 28),
+            child: Icon(
+              pcConnected
+                  ? Icons.computer_rounded
+                  : Icons.photo_library_rounded,
+              color: Colors.white,
+              size: 28,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '局域网相册互联',
-                  style: TextStyle(
+                Text(
+                  pcConnected ? '已连接电脑' : '局域网相册互联',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
@@ -306,7 +385,7 @@ class _HeroHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  running ? '服务已就绪，可扫电脑二维码配对' : '正在准备本机相册服务…',
+                  subtitle,
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.85),
                     fontSize: 13,
@@ -324,21 +403,34 @@ class _HeroHeader extends StatelessWidget {
 class _StatusCard extends StatelessWidget {
   const _StatusCard({
     required this.running,
+    required this.pcConnected,
     required this.status,
+    this.pcIp,
     this.error,
   });
 
   final bool running;
+  final bool pcConnected;
   final String status;
+  final String? pcIp;
   final String? error;
 
   @override
   Widget build(BuildContext context) {
     final color = error != null
         ? Colors.red
-        : running
+        : pcConnected
             ? const Color(0xFF1FA87A)
-            : PhotoLinkTheme.accent;
+            : running
+                ? PhotoLinkTheme.brand
+                : PhotoLinkTheme.accent;
+    final title = error != null
+        ? '服务异常'
+        : pcConnected
+            ? '已连接电脑'
+            : running
+                ? '等待电脑连接'
+                : '服务未就绪';
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -350,14 +442,23 @@ class _StatusCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: color,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 280),
                     child: Text(
                       status,
                       key: ValueKey(status),
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                      style: const TextStyle(
+                        color: Color(0xFF5A6F6D),
+                        height: 1.35,
+                      ),
                     ),
                   ),
                   if (error != null) ...[
@@ -369,6 +470,101 @@ class _StatusCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 已连接电脑时的醒目提示条：状态一眼可见
+class _PcLinkedBanner extends StatelessWidget {
+  const _PcLinkedBanner({this.pcIp});
+
+  final String? pcIp;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1FA87A), Color(0xFF0B6E6B)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1FA87A).withValues(alpha: 0.35),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.link_rounded,
+              color: Colors.white,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '电脑已连接',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  pcIp == null || pcIp!.isEmpty
+                      ? '可在电脑端浏览、下载与整理相册'
+                      : '电脑 $pcIp · 可浏览 / 下载 / 整理相册',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    '请保持 App 在前台',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.check_circle_rounded,
+            color: Colors.white,
+            size: 28,
+          ),
+        ],
       ),
     );
   }
