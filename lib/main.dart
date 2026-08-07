@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'core/app_env.dart';
 import 'core/constants.dart';
 import 'pages/home_page.dart';
 import 'services/delete_confirm_bridge.dart';
@@ -32,7 +33,8 @@ class _PhotoLinkAppState extends State<PhotoLinkApp> {
     return MaterialApp(
       navigatorKey: _navKey,
       title: '${PhotoLinkConst.appName} · ${PhotoLinkConst.appNameZh}',
-      debugShowCheckedModeBanner: false,
+      // 本地 / 测试显示角标，生产关闭
+      debugShowCheckedModeBanner: AppEnv.showDebugBanner,
       theme: PhotoLinkTheme.light(centerTitle: true),
       home: const HomePage(),
     );

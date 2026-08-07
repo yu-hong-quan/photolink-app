@@ -10,6 +10,8 @@ import '../services/mdns_advertise_service.dart';
 import '../services/photo_https_server.dart';
 import '../theme/app_theme.dart';
 import '../widgets/motion.dart';
+import 'about_page.dart';
+import 'discover_pc_page.dart';
 import 'scan_pc_qr_page.dart';
 
 /// 手机端首页：服务状态、扫码连电脑、本机信息
@@ -243,6 +245,39 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  /// 打开「搜索电脑」页：mDNS 发现后点选配对
+  void _openDiscoverPc(DeviceInfoModel info) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            DiscoverPcPage(phoneInfo: info),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.06),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+              )),
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _openAbout() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const AboutPage(clientLabel: '手机端'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final info = _info;
@@ -252,6 +287,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         appBar: AppBar(
           title: const Text('${PhotoLinkConst.appName} · ${PhotoLinkConst.appNameZh}'),
           actions: [
+            IconButton(
+              tooltip: '关于作者',
+              onPressed: _openAbout,
+              icon: const Icon(Icons.info_outline_rounded),
+            ),
             IconButton(
               tooltip: '刷新（已连接时保持服务）',
               onPressed: _onRefreshPressed,
@@ -288,6 +328,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
               ],
               if (info != null) ...[
+                const SizedBox(height: 16),
+                FadeSlideIn(
+                  delay: const Duration(milliseconds: 120),
+                  child: _DiscoverPcCard(
+                    enabled: _running,
+                    onDiscover: () => _openDiscoverPc(info),
+                  ),
+                ),
                 const SizedBox(height: 16),
                 FadeSlideIn(
                   delay: const Duration(milliseconds: 140),
@@ -565,6 +613,42 @@ class _PcLinkedBanner extends StatelessWidget {
             size: 28,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DiscoverPcCard extends StatelessWidget {
+  const _DiscoverPcCard({required this.enabled, required this.onDiscover});
+
+  final bool enabled;
+  final VoidCallback onDiscover;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              '搜索附近电脑',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '主动扫描局域网中的 PhotoLink 电脑，点选后即可配对连接。',
+              style: TextStyle(color: Color(0xFF5A6F6D), height: 1.4),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: enabled ? onDiscover : null,
+              icon: const Icon(Icons.radar_rounded),
+              label: const Text('搜索并连接电脑'),
+            ),
+          ],
+        ),
       ),
     );
   }

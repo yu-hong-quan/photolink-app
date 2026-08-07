@@ -1,12 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../core/models/device_info.dart';
-import '../services/device_bootstrap_service.dart';
-import '../services/insecure_http.dart';
+import '../services/pc_pair_client.dart';
 
 /// App 扫描 PC 屏幕上的配对二维码，并把本机相册服务地址回传给 PC
 class ScanPcQrPage extends StatefulWidget {
@@ -101,46 +98,28 @@ class _ScanPcQrPageState extends State<ScanPcQrPage> {
     await _controller!.stop();
 
     try {
-      final latest = await DeviceBootstrapService.instance.buildDeviceInfo();
-      final phone = DeviceInfoModel(
-        deviceId: latest.deviceId.isNotEmpty
-            ? latest.deviceId
-            : widget.phoneInfo.deviceId,
-        deviceName: latest.deviceName,
-        deviceType: 'phone',
-        osVersion: latest.osVersion,
-        ip: latest.ip,
-        port: latest.port,
+      final phone = await PcPairClient.pairToPc(
+        pc: pc,
+        fallbackPhone: widget.phoneInfo,
       );
-
-      final uri = Uri.parse('https://${pc.ip}:${pc.port}/api/pair');
-      final res = await postJsonInsecure(uri, jsonEncode(phone.toJson()));
       if (!mounted) return;
-      if (res.statusCode == 200) {
-        await showDialog<void>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('配对成功'),
-            content: Text(
-              '已把本机地址 ${phone.ip}:${phone.port} 发给电脑「${pc.deviceName}」。\n'
-              '请在电脑端点击连接即可浏览相册。',
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('好的'),
-              ),
-            ],
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('配对成功'),
+          content: Text(
+            '已把本机地址 ${phone.ip}:${phone.port} 发给电脑「${pc.deviceName}」。\n'
+            '请在电脑端点击连接即可浏览相册。',
           ),
-        );
-        if (mounted) Navigator.pop(context, true);
-      } else {
-        setState(() {
-          _handling = false;
-          _message = '配对失败 HTTP ${res.statusCode}: ${res.body}';
-        });
-        await _controller!.start();
-      }
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('好的'),
+            ),
+          ],
+        ),
+      );
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
       setState(() {
