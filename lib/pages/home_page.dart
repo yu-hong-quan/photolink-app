@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../core/constants.dart';
@@ -25,6 +26,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   DeviceInfoModel? _info;
   String _status = '正在初始化…';
   bool _running = false;
+  /// PC 是否已访问过本机 API（用于状态文案，不仅依赖启动瞬间）
+  bool _pcConnected = false;
+  String? _pcIp;
   String? _error;
 
   @override
@@ -49,13 +53,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _status = '应用已进入后台，局域网服务可能中断，请回到前台';
       });
     } else if (state == AppLifecycleState.resumed && _running) {
-      setState(() => _status = '服务运行中，等待 PC 连接');
+      setState(() => _status = _connectedStatusText());
     }
+  }
+
+  /// 按是否已有 PC 访问生成状态文案
+  String _connectedStatusText() {
+    if (!_pcConnected) return '服务运行中，等待 PC 连接';
+    final ip = _pcIp;
+    if (ip == null || ip.isEmpty) return 'PC 已连接，可传输相册';
+    return 'PC 已连接（$ip），可传输相册';
+  }
+
+  void _onClientActivity(String? remoteIp) {
+    if (!mounted || !_running) return;
+    final changed = !_pcConnected ||
+        (remoteIp != null && remoteIp.isNotEmpty && remoteIp != _pcIp);
+    if (!changed) return;
+    setState(() {
+      _pcConnected = true;
+      if (remoteIp != null && remoteIp.isNotEmpty) {
+        _pcIp = remoteIp;
+      }
+      _status = _connectedStatusText();
+    });
   }
 
   Future<void> _bootstrap() async {
     setState(() {
       _error = null;
+      _pcConnected = false;
+      _pcIp = null;
       _status = '正在申请权限…';
     });
     final err = await DeviceBootstrapService.instance.ensurePermissions();
@@ -68,7 +96,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
 
     final info = await DeviceBootstrapService.instance.buildDeviceInfo();
-    final server = PhotoHttpsServer(deviceInfo: info);
+    final server = PhotoHttpsServer(
+      deviceInfo: info,
+      onClientActivity: _onClientActivity,
+    );
     try {
       setState(() => _status = '正在启动 HTTPS 服务…');
       await server.start();
@@ -77,7 +108,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _info = info;
         _server = server;
         _running = true;
-        _status = '服务运行中，等待 PC 连接';
+        _status = _connectedStatusText();
       });
     } catch (e) {
       setState(() {
@@ -94,6 +125,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await _server?.stop();
     _server = null;
     _running = false;
+    _pcConnected = false;
+    _pcIp = null;
   }
 
   Future<void> _restart() async {
@@ -101,7 +134,39 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await _bootstrap();
   }
 
-  void _openScanner(DeviceInfoModel info) {
+  Future<void> _openScanner(DeviceInfoModel info) async {
+    // 进入扫码页前先预请求一次，减少首次进入直接 denied 的概率
+    final status = await Permission.camera.request();
+    if (!mounted) return;
+    if (status.isPermanentlyDenied) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('需要相机权限'),
+          content: const Text('扫码连接电脑需要使用相机，请在系统设置中开启权限。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('去设置'),
+            ),
+          ],
+        ),
+      );
+      if (go == true) await openAppSettings();
+      return;
+    }
+    if (!status.isGranted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('未授予相机权限，无法扫码')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>

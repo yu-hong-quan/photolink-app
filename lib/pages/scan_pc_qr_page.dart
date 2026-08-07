@@ -19,31 +19,65 @@ class ScanPcQrPage extends StatefulWidget {
 }
 
 class _ScanPcQrPageState extends State<ScanPcQrPage> {
-  final _controller = MobileScannerController();
+  MobileScannerController? _controller;
   bool _handling = false;
+  bool _cameraReady = false;
+  bool _requesting = true;
   String? _message;
 
   @override
   void initState() {
     super.initState();
-    _ensureCamera();
+    _prepareCamera();
   }
 
-  Future<void> _ensureCamera() async {
-    final status = await Permission.camera.request();
-    if (!status.isGranted && mounted) {
-      setState(() => _message = '需要摄像头权限才能扫描电脑二维码');
+  /// 先拿权限，再创建/启动扫码器，避免首次进入直接 denied
+  Future<void> _prepareCamera() async {
+    setState(() {
+      _requesting = true;
+      _message = null;
+    });
+
+    var status = await Permission.camera.status;
+    if (!status.isGranted) {
+      status = await Permission.camera.request();
     }
+
+    if (!mounted) return;
+
+    if (status.isGranted) {
+      // 等权限对话框完全关闭后再启相机，避免首次启动 race → denied
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (!mounted) return;
+      _controller = MobileScannerController(
+        autoStart: true,
+        facing: CameraFacing.back,
+      );
+      setState(() {
+        _cameraReady = true;
+        _requesting = false;
+        _message = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _cameraReady = false;
+      _requesting = false;
+      _message = status.isPermanentlyDenied
+          ? '相机权限被永久拒绝，请到系统设置中开启'
+          : '需要摄像头权限才能扫描电脑二维码';
+    });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
-    if (_handling) return;
+    if (_handling || _controller == null) return;
     final barcodes = capture.barcodes;
     String? raw;
     for (final b in barcodes) {
@@ -64,10 +98,9 @@ class _ScanPcQrPageState extends State<ScanPcQrPage> {
       _handling = true;
       _message = '正在向电脑 ${pc.deviceName}（${pc.ip}）发送本机地址…';
     });
-    await _controller.stop();
+    await _controller!.stop();
 
     try {
-      // 确保回传的是最新局域网 IP
       final latest = await DeviceBootstrapService.instance.buildDeviceInfo();
       final phone = DeviceInfoModel(
         deviceId: latest.deviceId.isNotEmpty
@@ -106,7 +139,7 @@ class _ScanPcQrPageState extends State<ScanPcQrPage> {
           _handling = false;
           _message = '配对失败 HTTP ${res.statusCode}: ${res.body}';
         });
-        await _controller.start();
+        await _controller!.start();
       }
     } catch (e) {
       if (!mounted) return;
@@ -114,7 +147,7 @@ class _ScanPcQrPageState extends State<ScanPcQrPage> {
         _handling = false;
         _message = '配对失败：$e\n请确认与电脑同一 WiFi，且防火墙放行配对端口。';
       });
-      await _controller.start();
+      await _controller!.start();
     }
   }
 
@@ -124,12 +157,7 @@ class _ScanPcQrPageState extends State<ScanPcQrPage> {
       appBar: AppBar(title: const Text('扫描电脑二维码')),
       body: Column(
         children: [
-          Expanded(
-            child: MobileScanner(
-              controller: _controller,
-              onDetect: _onDetect,
-            ),
-          ),
+          Expanded(child: _buildScannerArea()),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -148,7 +176,18 @@ class _ScanPcQrPageState extends State<ScanPcQrPage> {
                     ),
                   ),
                 ],
-                if (_handling) ...[
+                if (!_cameraReady && !_requesting) ...[
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: _prepareCamera,
+                    child: const Text('重新申请权限'),
+                  ),
+                  TextButton(
+                    onPressed: openAppSettings,
+                    child: const Text('打开系统设置'),
+                  ),
+                ],
+                if (_handling || _requesting) ...[
                   const SizedBox(height: 12),
                   const CircularProgressIndicator(),
                 ],
@@ -157,6 +196,21 @@ class _ScanPcQrPageState extends State<ScanPcQrPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildScannerArea() {
+    if (_requesting) {
+      return const Center(child: Text('正在申请相机权限…'));
+    }
+    if (!_cameraReady || _controller == null) {
+      return const Center(
+        child: Icon(Icons.no_photography_outlined, size: 64, color: Colors.grey),
+      );
+    }
+    return MobileScanner(
+      controller: _controller!,
+      onDetect: _onDetect,
     );
   }
 }
