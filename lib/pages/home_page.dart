@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../core/constants.dart';
 import '../core/models/device_info.dart';
@@ -43,6 +44,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // 退出页面时关闭亮屏锁，避免影响系统耗电策略
+    WakelockPlus.disable();
     _shutdown();
     super.dispose();
   }
@@ -51,11 +54,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
+      // 进后台后系统可能息屏并中断局域网服务
+      WakelockPlus.disable();
       setState(() {
-        _status = '应用已进入后台，局域网服务可能中断，请回到前台';
+        _status = '应用已进入后台，局域网服务可能中断，请回到前台并保持亮屏';
       });
     } else if (state == AppLifecycleState.resumed && _running) {
+      _syncWakeLock();
       setState(() => _status = _connectedStatusText());
+    }
+  }
+
+  /// PC 已连接且服务运行时保持亮屏，避免息屏导致传输中断
+  Future<void> _syncWakeLock() async {
+    try {
+      if (_running && _pcConnected) {
+        await WakelockPlus.enable();
+      } else {
+        await WakelockPlus.disable();
+      }
+    } catch (_) {
+      // 部分机型可能不支持，忽略即可
     }
   }
 
@@ -79,6 +98,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
       _status = _connectedStatusText();
     });
+    _syncWakeLock();
   }
 
   Future<void> _bootstrap() async {
@@ -129,6 +149,41 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _running = false;
     _pcConnected = false;
     _pcIp = null;
+    await WakelockPlus.disable();
+  }
+
+  /// 用户主动断开：停服务并清连接态，PC 端 watchdog 会感知失败
+  Future<void> _disconnectManually() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('断开连接'),
+        content: const Text(
+          '将停止本机局域网服务并断开与电脑的连接。\n'
+          '断开后可点击右上角刷新重新开启，等待电脑再次连接。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('断开'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await _shutdown();
+    if (!mounted) return;
+    setState(() {
+      _status = '已主动断开，点击右上角刷新可重新开启服务';
+      _error = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已断开连接')),
+    );
   }
 
   /// 硬重启：停 HTTPS + mDNS 后重建（会断开 PC）
@@ -324,7 +379,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 const SizedBox(height: 16),
                 FadeSlideIn(
                   delay: const Duration(milliseconds: 100),
-                  child: _PcLinkedBanner(pcIp: _pcIp),
+                  child: _PcLinkedBanner(
+                    pcIp: _pcIp,
+                    onDisconnect: _disconnectManually,
+                  ),
                 ),
               ],
               if (info != null) ...[
@@ -523,11 +581,12 @@ class _StatusCard extends StatelessWidget {
   }
 }
 
-/// 已连接电脑时的醒目提示条：状态一眼可见
+/// 已连接电脑时的醒目提示条：状态一眼可见，可主动断开
 class _PcLinkedBanner extends StatelessWidget {
-  const _PcLinkedBanner({this.pcIp});
+  const _PcLinkedBanner({this.pcIp, required this.onDisconnect});
 
   final String? pcIp;
+  final VoidCallback onDisconnect;
 
   @override
   Widget build(BuildContext context) {
@@ -548,69 +607,106 @@ class _PcLinkedBanner extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(
-              Icons.link_rounded,
-              color: Colors.white,
-              size: 28,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '电脑已连接',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
+          Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  pcIp == null || pcIp!.isEmpty
-                      ? '可在电脑端浏览、下载与整理相册'
-                      : '电脑 $pcIp · 可浏览 / 下载 / 整理相册',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    fontSize: 13,
-                    height: 1.35,
-                  ),
+                child: const Icon(
+                  Icons.link_rounded,
+                  color: Colors.white,
+                  size: 28,
                 ),
-                const SizedBox(height: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    '请保持 App 在前台',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '电脑已连接',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      pcIp == null || pcIp!.isEmpty
+                          ? '可在电脑端浏览、下载与整理相册'
+                          : '电脑 $pcIp · 可浏览 / 下载 / 整理相册',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            '请保持 App 在前台',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF3CD).withValues(alpha: 0.95),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            '请勿息屏',
+                            style: TextStyle(
+                              color: Color(0xFF8A6A2F),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const Icon(
-            Icons.check_circle_rounded,
-            color: Colors.white,
-            size: 28,
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: onDisconnect,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.7)),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            icon: const Icon(Icons.link_off_rounded),
+            label: const Text('断开连接'),
           ),
         ],
       ),
@@ -836,6 +932,7 @@ class _TipsCard extends StatelessWidget {
             const SizedBox(height: 10),
             _tip('手机与电脑需同一 WiFi，关闭 AP 隔离'),
             _tip('推荐：电脑显示二维码 → 手机扫码配对'),
+            _tip('传输时请勿息屏，并保持 App 在前台'),
             _tip('iOS 请保持 App 前台，退后台会中断服务'),
             _tip(
               '防火墙放行 TCP ${PhotoLinkConst.port}、${PhotoLinkConst.pairPort} 与 UDP 5353',

@@ -24,12 +24,11 @@ class DeviceBootstrapService {
     }
 
     if (Platform.isAndroid) {
-      // Android 13+ 细分媒体权限；旧版走存储权限
-      final photos = await Permission.photos.request();
-      final storage = await Permission.storage.request();
-      if (!photos.isGranted && !storage.isGranted && !photos.isLimited) {
-        // photo_manager 已授权时仍可继续
-      }
+      // Android 13+ 图片/视频权限拆分；缺 videos 会导致视频列表为空而照片正常
+      await Permission.photos.request();
+      await Permission.videos.request();
+      // 旧版 Android 仍依赖存储权限
+      await Permission.storage.request();
     }
 
     return null;
