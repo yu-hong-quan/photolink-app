@@ -30,7 +30,7 @@ class AlbumInfo {
       };
 }
 
-/// 封装 photo_manager：分页读相册、缩略图、原图、软删、归类、重命名。
+/// 封装 photo_manager：分页读相册、缩略图、原图/原视频、软删、归类、重命名。
 class GalleryService {
   GalleryService._();
   static final GalleryService instance = GalleryService._();
@@ -43,18 +43,34 @@ class GalleryService {
     return group;
   }
 
+  /// image → 仅图片；video → 仅视频；all → 图+视频
+  RequestType _requestType(String mediaType) {
+    switch (MediaKind.normalize(mediaType)) {
+      case MediaKind.video:
+        return RequestType.video;
+      case 'all':
+        return RequestType.common;
+      default:
+        return RequestType.image;
+    }
+  }
+
+  String _mediaTypeOf(AssetEntity a) =>
+      a.type == AssetType.video ? MediaKind.video : MediaKind.image;
+
   Future<bool> requestPermission() async {
     final state = await PhotoManager.requestPermissionExtend();
     return state.isAuth || state.hasAccess;
   }
 
-  /// 分页拉取图片元数据（强制按创建时间倒序，最近的在前）
+  /// 分页拉取媒体元数据（强制按创建时间倒序，最近的在前）
   Future<({List<PhotoMeta> list, int total})> listPhotos({
     required int page,
     required int pageSize,
     String? albumId,
+    String mediaType = MediaKind.image,
   }) async {
-    final album = await _resolveAlbum(albumId);
+    final album = await _resolveAlbum(albumId, mediaType: mediaType);
     if (album == null) {
       return (list: <PhotoMeta>[], total: 0);
     }
@@ -68,6 +84,7 @@ class GalleryService {
     for (final a in assets) {
       final overrideTitle = await PhotoMetaStore.instance.getDisplayTitle(a.id);
       final albumName = await PhotoMetaStore.instance.getAlbumName(a.id);
+      final kind = _mediaTypeOf(a);
       list.add(
         PhotoMeta(
           id: a.id,
@@ -78,15 +95,24 @@ class GalleryService {
           title: overrideTitle ?? a.title,
           albumId: albumId,
           albumName: albumName,
+          mediaType: kind,
+          // 视频时长：photo_manager 给 Duration
+          durationMs: kind == MediaKind.video
+              ? a.videoDuration.inMilliseconds
+              : 0,
         ),
       );
     }
     return (list: list, total: total);
   }
 
-  Future<AssetPathEntity?> _resolveAlbum(String? albumId) async {
+  Future<AssetPathEntity?> _resolveAlbum(
+    String? albumId, {
+    required String mediaType,
+  }) async {
+    final type = _requestType(mediaType);
     final paths = await PhotoManager.getAssetPathList(
-      type: RequestType.image,
+      type: type,
       onlyAll: albumId == null || albumId.isEmpty,
       filterOption: _newestFirstFilter,
     );
@@ -99,7 +125,7 @@ class GalleryService {
     }
     // onlyAll=true 时可能拿不到子相册，再拉一遍
     final all = await PhotoManager.getAssetPathList(
-      type: RequestType.image,
+      type: type,
       onlyAll: false,
       filterOption: _newestFirstFilter,
     );
@@ -109,9 +135,11 @@ class GalleryService {
     return null;
   }
 
-  Future<List<AlbumInfo>> listAlbums() async {
+  Future<List<AlbumInfo>> listAlbums({
+    String mediaType = MediaKind.image,
+  }) async {
     final paths = await PhotoManager.getAssetPathList(
-      type: RequestType.image,
+      type: _requestType(mediaType),
       onlyAll: false,
       filterOption: _newestFirstFilter,
     );
@@ -141,6 +169,7 @@ class GalleryService {
   Future<Uint8List?> getThumbnail(String photoId, {int size = 256}) async {
     final asset = await findAsset(photoId);
     if (asset == null) return null;
+    // 视频同样可取封面缩略图
     return asset.thumbnailDataWithSize(
       ThumbnailSize(size, size),
       quality: 80,
@@ -174,7 +203,7 @@ class GalleryService {
     final title = newTitle.trim();
     if (title.isEmpty) throw Exception('名称不能为空');
     final asset = await findAsset(photoId);
-    if (asset == null) throw Exception('照片不存在');
+    if (asset == null) throw Exception('媒体不存在');
     await PhotoMetaStore.instance.setDisplayTitle(photoId, title);
   }
 
@@ -230,8 +259,9 @@ class GalleryService {
   }
 
   Future<AssetPathEntity?> _findAlbumByName(String name) async {
+    // 归类目标相册需同时覆盖图/视频路径
     final paths = await PhotoManager.getAssetPathList(
-      type: RequestType.image,
+      type: RequestType.common,
       onlyAll: false,
     );
     for (final path in paths) {
@@ -254,6 +284,34 @@ class GalleryService {
       file.path,
       title: title ?? p.basename(file.path),
     );
+  }
+
+  /// 将上传的视频写入系统相册
+  Future<AssetEntity?> saveVideoFile(File file, {String? title}) async {
+    return PhotoManager.editor.saveVideo(
+      file,
+      title: title ?? p.basename(file.path),
+    );
+  }
+
+  /// 按扩展名 / mime 选择图片或视频入库
+  Future<AssetEntity?> saveMediaFile(File file, {String? title}) async {
+    final name = title ?? p.basename(file.path);
+    final ext = p.extension(file.path).toLowerCase();
+    const videoExts = {
+      '.mp4',
+      '.mov',
+      '.m4v',
+      '.avi',
+      '.mkv',
+      '.webm',
+      '.3gp',
+      '.wmv',
+    };
+    if (videoExts.contains(ext)) {
+      return saveVideoFile(file, title: name);
+    }
+    return saveImageFile(file, title: name);
   }
 
   Future<Directory> ensureUploadTempDir() async {

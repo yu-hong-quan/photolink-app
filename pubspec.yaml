@@ -1,5 +1,5 @@
 name: photolink_app
-description: PhotoLink（图联）手机端 - 局域网相册 HTTPS 服务与 mDNS 广播
+description: PhotoLink（图联）手机端 - 局域网照片/视频 HTTPS 服务与 mDNS 广播
 publish_to: "none"
 version: 1.1.0+2
 

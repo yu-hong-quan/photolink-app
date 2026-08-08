@@ -20,7 +20,7 @@ class DeviceBootstrapService {
   Future<String?> ensurePermissions() async {
     final photosOk = await GalleryService.instance.requestPermission();
     if (!photosOk) {
-      return '请授予相册完整访问权限，否则无法提供相册服务';
+      return '请授予相册完整访问权限（含照片与视频），否则无法提供服务';
     }
 
     if (Platform.isAndroid) {

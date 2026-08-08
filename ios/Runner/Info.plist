@@ -27,11 +27,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>PhotoLink 需要访问相册，以便在局域网内供电脑浏览、下载与管理照片。</string>
+	<string>PhotoLink 需要访问相册，以便在局域网内供电脑浏览、下载与管理照片和视频。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>PhotoLink 需要写入相册，以便接收电脑拖拽上传的图片。</string>
+	<string>PhotoLink 需要写入相册，以便接收电脑拖拽上传的图片和视频。</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>PhotoLink 需要使用本地网络，以便与电脑在同一 WiFi 下互联传输照片。</string>
+	<string>PhotoLink 需要使用本地网络，以便与电脑在同一 WiFi 下互联传输照片和视频。</string>
 	<key>NSCameraUsageDescription</key>
 	<string>PhotoLink 需要使用摄像头扫描电脑端配对二维码。</string>
 	<key>NSBonjourServices</key>

@@ -100,7 +100,7 @@ class _DeleteConfirmDialogState extends State<_DeleteConfirmDialog> {
       builder: (ctx) => AlertDialog(
         title: const Text('再次确认删除'),
         content: Text(
-          '确认将 ${widget.photoIds.length} 张图片移入回收站？\n'
+          '确认将 ${widget.photoIds.length} 项媒体移入回收站？\n'
           '可在回收站撤回；彻底删除需另行操作。',
         ),
         actions: [
@@ -147,7 +147,7 @@ class _DeleteConfirmDialogState extends State<_DeleteConfirmDialog> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: Text(
-                '请滑动/点选查看全部图片，确认无误后再删除',
+                '请滑动/点选查看全部媒体，确认无误后再删除',
                 style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
               ),
             ),

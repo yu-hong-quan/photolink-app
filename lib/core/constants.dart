@@ -28,5 +28,5 @@ class PhotoLinkConst {
   static const String authorGithub = 'https://github.com/yu-hong-quan';
   static const String authorEmail = '';
   static const String productDesc =
-      '局域网相册互联工具：手机提供相册服务，电脑发现并浏览、下载与整理。';
+      '局域网相册互联工具：手机提供照片/视频服务，电脑发现并浏览、下载与整理。';
 }

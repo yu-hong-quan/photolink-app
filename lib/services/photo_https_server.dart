@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:mime/mime.dart';
 import 'package:path/path.dart' as p;
+import 'package:photo_manager/photo_manager.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
@@ -11,6 +12,7 @@ import 'package:uuid/uuid.dart';
 
 import '../core/constants.dart';
 import '../core/models/device_info.dart';
+import '../core/models/photo_meta.dart';
 import 'delete_confirm_bridge.dart';
 import 'gallery_service.dart';
 import 'trash_service.dart';
@@ -67,7 +69,7 @@ class PhotoHttpsServer {
       return _json(deviceInfo.toJson());
     });
 
-    // 分页相册元数据：只返回 JSON，不返回图片二进制；支持 albumId 过滤
+    // 分页媒体元数据：只返回 JSON；支持 albumId + mediaType(image|video|all)
     router.get('/api/gallery/list', (Request request) async {
       final page =
           int.tryParse(request.url.queryParameters['page'] ?? '0') ?? 0;
@@ -77,22 +79,34 @@ class PhotoHttpsServer {
           ) ??
           PhotoLinkConst.defaultPageSize;
       final albumId = request.url.queryParameters['albumId'];
+      // 默认 image，兼容旧 PC；新 PC 会显式传 video
+      final mediaType = MediaKind.normalize(
+        request.url.queryParameters['mediaType'],
+      );
       final result = await GalleryService.instance.listPhotos(
         page: page,
         pageSize: pageSize,
         albumId: albumId,
+        mediaType: mediaType,
       );
       return _json({
         'page': page,
         'pageSize': pageSize,
         'total': result.total,
+        'mediaType': mediaType,
         'list': result.list.map((e) => e.toJson()).toList(),
       });
     });
 
     router.get('/api/gallery/albums', (Request request) async {
-      final albums = await GalleryService.instance.listAlbums();
+      final mediaType = MediaKind.normalize(
+        request.url.queryParameters['mediaType'],
+      );
+      final albums = await GalleryService.instance.listAlbums(
+        mediaType: mediaType,
+      );
       return _json({
+        'mediaType': mediaType,
         'list': albums.map((e) => e.toJson()).toList(),
       });
     });
@@ -115,7 +129,7 @@ class PhotoHttpsServer {
       },
     );
 
-    // 原图：以文件流响应，避免整图读入内存
+    // 原图/原视频：以文件流响应，避免整文件读入内存
     router.get(
       '/api/gallery/original/<photoId>',
       (Request request, String photoId) async {
@@ -254,7 +268,7 @@ class PhotoHttpsServer {
       return _json({'success': true, 'purged': ids});
     });
 
-    // 流式上传：边收边写临时文件，再写入系统相册
+    // 流式上传：边收边写临时文件，再按扩展名写入系统相册（图/视频）
     router.post('/api/gallery/upload', (Request request) async {
       final fileName = request.headers['x-filename'] ??
           request.headers['X-Filename'] ??
@@ -269,7 +283,7 @@ class PhotoHttpsServer {
         }
         await sink.flush();
         await sink.close();
-        final entity = await GalleryService.instance.saveImageFile(
+        final entity = await GalleryService.instance.saveMediaFile(
           tempFile,
           title: safeName,
         );
@@ -279,10 +293,12 @@ class PhotoHttpsServer {
         if (entity == null) {
           return _json({'success': false, 'message': '写入相册失败'}, status: 500);
         }
+        final isVideo = entity.type == AssetType.video;
         return _json({
           'success': true,
           'photoId': entity.id,
           'fileName': safeName,
+          'mediaType': isVideo ? MediaKind.video : MediaKind.image,
         });
       } catch (e) {
         try {

@@ -18,6 +18,7 @@ class TrashItem {
     required this.createTimeMs,
     required this.deletedAtMs,
     required this.fileName,
+    this.mediaType = 'image',
   });
 
   final String id;
@@ -29,6 +30,11 @@ class TrashItem {
   final int createTimeMs;
   final int deletedAtMs;
   final String fileName;
+
+  /// image / video，恢复时决定写入系统相册的方式
+  final String mediaType;
+
+  bool get isVideo => mediaType == 'video';
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -42,21 +48,39 @@ class TrashItem {
         'createTimeMs': createTimeMs,
         'deletedAtMs': deletedAtMs,
         'fileName': fileName,
+        'mediaType': mediaType,
       };
 
   factory TrashItem.fromJson(Map<String, dynamic> json) {
+    final mime = json['mimeType']?.toString();
+    final rawType = json['mediaType']?.toString();
+    final fileName = json['fileName']?.toString() ?? 'file.bin';
+    // 旧回收站条目无 mediaType 时，按 mime / 扩展名推断
+    final mediaType = (rawType != null && rawType.isNotEmpty)
+        ? rawType
+        : ((mime != null && mime.startsWith('video/')) ||
+                _looksLikeVideoExt(fileName)
+            ? 'video'
+            : 'image');
     return TrashItem(
       id: json['id']?.toString() ?? '',
       originalPhotoId: json['originalPhotoId']?.toString() ?? '',
       title: json['title']?.toString() ?? '未命名',
-      mimeType: json['mimeType']?.toString(),
+      mimeType: mime,
       width: int.tryParse('${json['width']}') ?? 0,
       height: int.tryParse('${json['height']}') ?? 0,
       createTimeMs: int.tryParse('${json['createTimeMs']}') ?? 0,
       deletedAtMs: int.tryParse('${json['deletedAtMs']}') ?? 0,
-      fileName: json['fileName']?.toString() ?? 'file.bin',
+      fileName: fileName,
+      mediaType: mediaType,
     );
   }
+}
+
+bool _looksLikeVideoExt(String name) {
+  final lower = name.toLowerCase();
+  const exts = ['.mp4', '.mov', '.m4v', '.avi', '.mkv', '.webm', '.3gp', '.wmv'];
+  return exts.any(lower.endsWith);
 }
 
 /// 软删除回收站：先备份原图到 App 目录，再从系统相册删除；可恢复或彻底删除
@@ -105,13 +129,14 @@ class TrashService {
       final item = TrashItem(
         id: trashId,
         originalPhotoId: photoId,
-        title: asset.title ?? 'photo_$photoId',
+        title: asset.title ?? 'media_$photoId',
         mimeType: asset.mimeType,
         width: asset.width,
         height: asset.height,
         createTimeMs: asset.createDateTime.millisecondsSinceEpoch,
         deletedAtMs: DateTime.now().millisecondsSinceEpoch,
         fileName: fileName,
+        mediaType: asset.type == AssetType.video ? 'video' : 'image',
       );
       await File(p.join(dir.path, 'meta.json'))
           .writeAsString(jsonEncode(item.toJson()));
@@ -183,15 +208,23 @@ class TrashService {
     }
   }
 
-  /// 撤回：写回系统相册并清理回收站条目
+  /// 撤回：写回系统相册并清理回收站条目（视频走 saveVideo）
   Future<AssetEntity?> restore(String trashId) async {
     final item = await _readMeta(trashId);
     final file = await originalFile(trashId);
     if (item == null || file == null) return null;
-    final entity = await PhotoManager.editor.saveImageWithPath(
-      file.path,
-      title: item.title,
-    );
+    final AssetEntity? entity;
+    if (item.isVideo || _looksLikeVideoExt(item.fileName)) {
+      entity = await PhotoManager.editor.saveVideo(
+        file,
+        title: item.title,
+      );
+    } else {
+      entity = await PhotoManager.editor.saveImageWithPath(
+        file.path,
+        title: item.title,
+      );
+    }
     await purge([trashId]);
     return entity;
   }
