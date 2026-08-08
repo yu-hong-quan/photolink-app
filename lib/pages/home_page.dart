@@ -358,30 +358,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
             children: [
-              FadeSlideIn(
-                child: _HeroHeader(
-                  running: _running,
-                  pcConnected: _pcConnected,
-                ),
-              ),
-              const SizedBox(height: 16),
-              FadeSlideIn(
-                delay: const Duration(milliseconds: 80),
-                child: _StatusCard(
-                  running: _running,
-                  pcConnected: _pcConnected,
-                  pcIp: _pcIp,
-                  status: _status,
-                  error: _error,
-                ),
-              ),
+              // 已连接时只保留一块状态（绿 Banner）；未连接仍显示 Hero + 状态卡
               if (_pcConnected && _running) ...[
-                const SizedBox(height: 16),
                 FadeSlideIn(
-                  delay: const Duration(milliseconds: 100),
                   child: _PcLinkedBanner(
                     pcIp: _pcIp,
                     onDisconnect: _disconnectManually,
+                  ),
+                ),
+              ] else ...[
+                FadeSlideIn(
+                  child: _HeroHeader(
+                    running: _running,
+                    pcConnected: _pcConnected,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FadeSlideIn(
+                  delay: const Duration(milliseconds: 80),
+                  child: _StatusCard(
+                    running: _running,
+                    pcConnected: _pcConnected,
+                    pcIp: _pcIp,
+                    status: _status,
+                    error: _error,
                   ),
                 ),
               ],
