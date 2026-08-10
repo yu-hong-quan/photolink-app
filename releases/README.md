@@ -1,10 +1,15 @@
 ﻿# 发布产物说明
 
-正式安装包请下载：
+正式安装包下载：
 
-- [PhotoLink-1.1.1-prod-arm64.apk](./PhotoLink-1.1.1-prod-arm64.apk)（若本目录已随仓库提供）
-- 或到仓库 Releases / 本 README 顶部「下载安装」区获取
+- 手机端 APK（arm64）：  
+  https://github.com/yu-hong-quan/photolink-app/releases/download/v1.1.1/PhotoLink-1.1.1-prod-arm64.apk
+- 电脑端 Setup：  
+  https://github.com/yu-hong-quan/photolink-pc/raw/master/releases/PhotoLink-Setup-1.1.1-prod.exe
 
-打包命令：`.\scripts\build-android.ps1 -Env prod` 后执行分架构：
+本地重新打包：
 
-`flutter build apk --release --split-per-abi --dart-define=FLAVOR=prod`
+```bash
+.\scripts\build-android.ps1 -Env prod
+flutter build apk --release --split-per-abi --dart-define=FLAVOR=prod
+```
