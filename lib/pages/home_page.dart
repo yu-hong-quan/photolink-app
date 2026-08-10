@@ -305,7 +305,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            DiscoverPcPage(phoneInfo: info),
+            DiscoverPcPage(
+              phoneInfo: info,
+              // 首页已感知的 PC 远端 IP，用于列表标注「当前连接」
+              connectedPcIp: _pcConnected ? _pcIp : null,
+            ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(
             opacity: animation,

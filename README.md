@@ -6,6 +6,19 @@
 
 ---
 
+## 下载安装（v1.1.1 · prod）
+
+| 端 | 文件 | 说明 |
+|----|------|------|
+| **手机端 APK** | [⬇️ PhotoLink-1.1.1-prod-arm64.apk](./releases/PhotoLink-1.1.1-prod-arm64.apk) | Android 安装包（arm64，绝大多数现代手机） |
+| **电脑端安装包** | [⬇️ PhotoLink-Setup-1.1.1-prod.exe](https://github.com/yu-hong-quan/photolink-pc/raw/master/releases/PhotoLink-Setup-1.1.1-prod.exe) | Windows 安装程序（在配套 PC 仓库） |
+
+> 手机与电脑必须使用同一环境（本安装包均为 **prod**）。下载后请允许「未知来源」安装 APK；电脑端按向导安装即可。
+
+若 GitHub 网页预览无法直接下载，可打开仓库 [`releases`](./releases/) 目录，点击对应文件 → `Download` / `View raw`。
+
+---
+
 ## 界面预览
 
 ### 已连接电脑（首页）

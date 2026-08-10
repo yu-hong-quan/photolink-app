@@ -80,8 +80,20 @@ class GalleryService {
     // 兜底再按创建时间倒序（部分机型 filter 不生效）
     assets.sort((a, b) => b.createDateTime.compareTo(a.createDateTime));
 
+    // 并行取文件大小，避免逐张串行拖慢分页
+    final sizeResults = await Future.wait(
+      assets.map((a) async {
+        try {
+          return await a.fileSize;
+        } catch (_) {
+          return 0;
+        }
+      }),
+    );
+
     final list = <PhotoMeta>[];
-    for (final a in assets) {
+    for (var i = 0; i < assets.length; i++) {
+      final a = assets[i];
       final overrideTitle = await PhotoMetaStore.instance.getDisplayTitle(a.id);
       final albumName = await PhotoMetaStore.instance.getAlbumName(a.id);
       final kind = _mediaTypeOf(a);
@@ -100,6 +112,7 @@ class GalleryService {
           durationMs: kind == MediaKind.video
               ? a.videoDuration.inMilliseconds
               : 0,
+          sizeBytes: sizeResults[i],
         ),
       );
     }

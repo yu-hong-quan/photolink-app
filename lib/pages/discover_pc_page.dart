@@ -9,9 +9,16 @@ import '../theme/app_theme.dart';
 
 /// App 主动搜索局域网电脑并选择连接（配对）
 class DiscoverPcPage extends StatefulWidget {
-  const DiscoverPcPage({super.key, required this.phoneInfo});
+  const DiscoverPcPage({
+    super.key,
+    required this.phoneInfo,
+    this.connectedPcIp,
+  });
 
   final DeviceInfoModel phoneInfo;
+
+  /// 当前已与本机相册通信的电脑 IP（来自 HTTPS 远端地址）；为空表示尚未连接
+  final String? connectedPcIp;
 
   @override
   State<DiscoverPcPage> createState() => _DiscoverPcPageState();
@@ -26,6 +33,18 @@ class _DiscoverPcPageState extends State<DiscoverPcPage> {
   String? _error;
   String? _hint;
   Timer? _rescanTimer;
+
+  String? get _connectedIp {
+    final ip = widget.connectedPcIp?.trim();
+    if (ip == null || ip.isEmpty) return null;
+    return ip;
+  }
+
+  bool _isConnected(DeviceInfoModel pc) {
+    final connected = _connectedIp;
+    if (connected == null) return false;
+    return pc.ip == connected;
+  }
 
   @override
   void initState() {
@@ -134,9 +153,45 @@ class _DiscoverPcPageState extends State<DiscoverPcPage> {
     }
   }
 
+  /// 已连接置顶；同组内按名称排序
+  List<DeviceInfoModel> get _sortedList {
+    final list = _pcs.values.toList();
+    list.sort((a, b) {
+      final ac = _isConnected(a);
+      final bc = _isConnected(b);
+      if (ac != bc) return ac ? -1 : 1;
+      return a.deviceName.compareTo(b.deviceName);
+    });
+    return list;
+  }
+
+  /// 若已连接 IP 未出现在 mDNS 结果中，补一条占位，避免「当前连接」看不见
+  List<DeviceInfoModel> get _displayList {
+    final list = _sortedList;
+    final connected = _connectedIp;
+    if (connected == null) return list;
+    final exists = list.any((e) => e.ip == connected);
+    if (exists) return list;
+    return [
+      DeviceInfoModel(
+        deviceId: 'connected::$connected',
+        deviceName: '当前已连接电脑',
+        deviceType: 'pc',
+        osVersion: '',
+        ip: connected,
+        // 占位仅展示；端口未知时用 0，不提供「连接」动作依赖真实 mDNS 项
+        port: 0,
+      ),
+      ...list,
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final list = _pcs.values.toList();
+    final list = _displayList;
+    final connectedCount = list.where(_isConnected).length;
+    final otherCount = list.length - connectedCount;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('搜索电脑'),
@@ -165,7 +220,7 @@ class _DiscoverPcPageState extends State<DiscoverPcPage> {
                         : (_hint ??
                             (_scanning
                                 ? '扫描中'
-                                : '发现 ${list.length} 台电脑')),
+                                : '已连接 $connectedCount · 可连接 $otherCount')),
                     style: const TextStyle(fontSize: 14, height: 1.35),
                   ),
                 ),
@@ -194,35 +249,134 @@ class _DiscoverPcPageState extends State<DiscoverPcPage> {
                       ),
                     ),
                   )
-                : ListView.separated(
+                : ListView(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                    itemCount: list.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, i) {
-                      final pc = list[i];
-                      return Card(
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor:
-                                PhotoLinkTheme.brand.withValues(alpha: 0.15),
-                            child: const Icon(
-                              Icons.computer_rounded,
-                              color: PhotoLinkTheme.brand,
-                            ),
-                          ),
-                          title: Text(
-                            pc.deviceName,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          subtitle: Text('${pc.ip}:${pc.port}'),
-                          trailing: FilledButton(
-                            onPressed: _pairing ? null : () => _connect(pc),
-                            child: const Text('连接'),
-                          ),
+                    children: [
+                      if (connectedCount > 0) ...[
+                        const _SectionLabel(
+                          title: '当前连接',
+                          subtitle: '已与本机相册通信的电脑',
                         ),
-                      );
-                    },
+                        ...list.where(_isConnected).map(_buildPcCard),
+                        const SizedBox(height: 12),
+                      ],
+                      if (otherCount > 0) ...[
+                        _SectionLabel(
+                          title: '可连接',
+                          subtitle: connectedCount > 0
+                              ? '局域网内其他 PhotoLink 电脑'
+                              : '点选后即可配对',
+                        ),
+                        ...list.where((e) => !_isConnected(e)).map(_buildPcCard),
+                      ],
+                    ],
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPcCard(DeviceInfoModel pc) {
+    final connected = _isConnected(pc);
+    // mDNS 未解析到、仅靠 IP 占位的项不能发起配对
+    final canPair = !connected && pc.port > 0;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Card(
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: connected
+                ? const Color(0xFF1FA87A).withValues(alpha: 0.18)
+                : PhotoLinkTheme.brand.withValues(alpha: 0.15),
+            child: Icon(
+              connected
+                  ? Icons.link_rounded
+                  : Icons.computer_rounded,
+              color: connected
+                  ? const Color(0xFF1FA87A)
+                  : PhotoLinkTheme.brand,
+            ),
+          ),
+          title: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  pc.deviceName,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (connected) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1FA87A).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    '已连接',
+                    style: TextStyle(
+                      color: Color(0xFF1FA87A),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          subtitle: Text(
+            pc.port > 0 ? '${pc.ip}:${pc.port}' : pc.ip,
+          ),
+          trailing: connected
+              ? TextButton(
+                  onPressed: _pairing || pc.port <= 0
+                      ? null
+                      : () => _connect(pc),
+                  child: const Text('重新连接'),
+                )
+              : FilledButton(
+                  onPressed: (_pairing || !canPair) ? null : () => _connect(pc),
+                  child: const Text('连接'),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 列表分组标题
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              color: Color(0xFF163A38),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF5A6F6D),
+            ),
           ),
         ],
       ),
