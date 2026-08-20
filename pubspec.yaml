@@ -1,7 +1,7 @@
 name: photolink_app
 description: PhotoLink（图联）手机端 - 局域网照片/视频 HTTPS 服务与 mDNS 广播
 publish_to: "none"
-version: 1.1.1+3
+version: 1.1.3+5
 
 environment:
   sdk: ^3.11.5
@@ -48,3 +48,4 @@ flutter_launcher_icons:
   adaptive_icon_background: "#0B6E6B"
   adaptive_icon_foreground: assets/icons/app_icon.png
   remove_alpha_ios: true
+  background_color_ios: "#0B6E6B"
