@@ -10,11 +10,37 @@
 
 | 端 | 文件 | 说明 |
 |----|------|------|
-| **手机端 APK** | [⬇️ PhotoLink-1.1.1-prod-arm64.apk](https://github.com/yu-hong-quan/photolink-app/releases/download/v1.1.1/PhotoLink-1.1.1-prod-arm64.apk) | Android 安装包（arm64，绝大多数现代手机） |
-| **电脑端安装包** | [⬇️ PhotoLink-Setup-1.1.1-prod.exe](https://github.com/yu-hong-quan/photolink-pc/raw/master/releases/PhotoLink-Setup-1.1.1-prod.exe) | Windows 安装程序（在配套 PC 仓库） |
+| **Android 手机端** | [⬇️ PhotoLink-1.1.1-prod-arm64.apk](https://github.com/yu-hong-quan/photolink-app/releases/download/v1.1.1/PhotoLink-1.1.1-prod-arm64.apk) | Android 安装包（arm64，绝大多数现代手机） |
+| **iOS 手机端** | — | **暂无公开安装包**（见下方说明） |
+| **Windows 电脑端** | [⬇️ PhotoLink-Setup-1.1.1-prod.exe](https://github.com/yu-hong-quan/photolink-pc/raw/master/releases/PhotoLink-Setup-1.1.1-prod.exe) | Windows 安装程序（配套 PC 仓库） |
+| **macOS 电脑端** | [⬇️ PhotoLink-1.1.1-prod-macos.dmg](https://github.com/yu-hong-quan/photolink-pc/raw/master/releases/PhotoLink-1.1.1-prod-macos.dmg) | macOS 磁盘镜像（配套 PC 仓库） |
 
-> 手机与电脑必须使用同一环境（本安装包均为 **prod**）。下载后请允许「未知来源」安装 APK；电脑端按向导安装即可。  
-> APK 也可在 [Releases · v1.1.1](https://github.com/yu-hong-quan/photolink-app/releases/tag/v1.1.1) 页面获取。
+> 手机与电脑必须使用同一环境（本安装包均为 **prod**）。  
+> Android：允许「未知来源」安装 APK。APK 也可在 [Releases · v1.1.1](https://github.com/yu-hong-quan/photolink-app/releases/tag/v1.1.1) 获取。  
+> **macOS 电脑端 + Android 手机端可以互联**（同一 Wi‑Fi、同一 FLAVOR）。
+
+### iOS 说明（为何没有公开包）
+
+苹果不允许像 Android APK 那样把 IPA 挂到 GitHub 供任意人下载安装，因此 **本仓库 Releases 不提供 iOS 安装包**。
+
+| 场景 | 建议 |
+|------|------|
+| 普通用户 | 使用 **Android APK** + Windows / macOS 电脑端 |
+| 开发者自用 | Mac + Xcode，对本机 iPhone 签名后 `flutter run` / Archive 安装（免费 Apple ID 约 7 天需重签） |
+| 小范围测试 | 开通 Apple Developer 后可用 Ad Hoc（需登记设备 UDID）或 TestFlight |
+| 公开分发 | 仅 App Store / TestFlight，**不能**靠 GitHub 直链 IPA |
+
+本地自编译（需 macOS + Xcode，并在 `ios/Runner.xcworkspace` 配置 Team）：
+
+```bash
+./scripts/build-ios.sh prod
+# 或直接装到已连接的 iPhone：
+flutter run --release --dart-define=FLAVOR=prod
+```
+
+### macOS 电脑端安装提示
+
+DMG 来自 [photolink-pc](https://github.com/yu-hong-quan/photolink-pc) 的 `releases/`，当前 **未做 Apple 公证**。若提示无法验证开发者：右键 App → 打开 → 仍要打开；或在「系统设置 → 隐私与安全性」中允许。
 
 ---
 
@@ -106,14 +132,16 @@ flutter run --dart-define=FLAVOR=local
 
 产物：`build/app/outputs/bundle/release/app-release.aab`
 
-### iOS（需在 macOS 上）
+### iOS（需在 macOS 上 · 仅自用 / 不上架公开分发）
 
 ```bash
 ./scripts/build-ios.sh prod
 ```
 
 产物：`build/ios/iphoneos/Runner.app`  
-上架 / 导出 IPA：用 Xcode 打开 `ios/Runner.xcworkspace` → Archive。
+导出 IPA：用 Xcode 打开 `ios/Runner.xcworkspace` → Archive。  
+
+> **注意**：即便打出 IPA，也不能像 APK 一样放到 GitHub 给陌生人直接安装（见上文「iOS 说明」）。
 
 ---
 
