@@ -13,7 +13,7 @@
 | **Android 手机端** | [⬇️ PhotoLink-1.1.1-prod-arm64.apk](https://github.com/yu-hong-quan/photolink-app/releases/download/v1.1.1/PhotoLink-1.1.1-prod-arm64.apk) | Android 安装包（arm64，绝大多数现代手机） |
 | **iOS 手机端** | — | **暂无公开安装包**（见下方说明） |
 | **Windows 电脑端** | [⬇️ PhotoLink-Setup-1.1.1-prod.exe](https://github.com/yu-hong-quan/photolink-pc/raw/master/releases/PhotoLink-Setup-1.1.1-prod.exe) | Windows 安装程序（配套 PC 仓库） |
-| **macOS 电脑端** | [⬇️ PhotoLink-1.1.5-prod-macos.dmg](https://github.com/yu-hong-quan/photolink-pc/raw/master/releases/PhotoLink-1.1.5-prod-macos.dmg) | macOS 磁盘镜像（配套 PC 仓库，已去白边） |
+| **macOS 电脑端** | [⬇️ PhotoLink-1.1.6-prod-macos.dmg](https://github.com/yu-hong-quan/photolink-pc/raw/master/releases/PhotoLink-1.1.6-prod-macos.dmg) | macOS 磁盘镜像（配套 PC 仓库，已去白边） |
 
 > 手机与电脑必须使用同一环境（本安装包均为 **prod**）。  
 > Android：允许「未知来源」安装 APK。APK 也可在 [Releases · v1.1.1](https://github.com/yu-hong-quan/photolink-app/releases/tag/v1.1.1) 获取。  
